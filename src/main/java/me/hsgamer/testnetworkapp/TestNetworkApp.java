@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.TimeoutException;
 
+// TODO: use fabric-gateway
 public class TestNetworkApp {
     public static void main(String[] args) throws IOException {
         // Load an existing wallet holding identities used to access the network.
@@ -20,7 +21,6 @@ public class TestNetworkApp {
         // Configure the gateway connection used to access the network.
         Gateway.Builder builder = Gateway.createBuilder()
                 .identity(wallet, "Admin")
-                .discovery(true)
                 .networkConfig(networkConfigFile);
 
         // Create a gateway connection

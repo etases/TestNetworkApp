@@ -27,7 +27,7 @@ public class TestNetworkApp {
         try (Gateway gateway = builder.connect()) {
 
             // Obtain a smart contract deployed on the network.
-            Network network = gateway.getNetwork("mychannel");
+            Network network = gateway.getNetwork(args.length > 0 ? args[0] : "mychannel");
             Contract contract = network.getContract("simple");
 
             // Submit transactions that store state to the ledger.

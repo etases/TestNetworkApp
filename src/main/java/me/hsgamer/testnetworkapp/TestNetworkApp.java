@@ -7,6 +7,8 @@ import org.hyperledger.fabric.client.*;
 import org.hyperledger.fabric.client.identity.*;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,7 +30,7 @@ public class TestNetworkApp {
     public static void main(String[] args) throws IOException, InvalidKeyException, GatewayException, InterruptedException, CommitException, CertificateException {
         var certReader = Files.newBufferedReader(certPath);
         var certificate = Identities.readX509Certificate(certReader);
-        Identity identity = new X509Identity("org1-example-com", certificate);
+        Identity identity = new X509Identity("org0-example-com", certificate);
 
         Path keyPath;
         try (var keyFiles = Files.list(keyDirPath)) {
@@ -40,8 +42,8 @@ public class TestNetworkApp {
 
         var tlsCertReader = Files.newBufferedReader(tlsCertPath);
         var tlsCert = Identities.readX509Certificate(tlsCertReader);
-        ManagedChannel grpcChannel = NettyChannelBuilder.forAddress("192.168.1.10", 7002)
-                .keepAliveWithoutCalls(true)
+        SocketAddress endpointAddress = new InetSocketAddress("192.168.1.10", 7002);
+        ManagedChannel grpcChannel = NettyChannelBuilder.forAddress(endpointAddress)
                 .sslContext(GrpcSslContexts.forClient().trustManager(tlsCert).build()).overrideAuthority("peer1.org0.example.com")
                 .build();
 
@@ -58,11 +60,14 @@ public class TestNetworkApp {
             Network network = gateway.getNetwork(args.length > 0 ? args[0] : "mychannel");
             Contract contract = network.getContract("simple");
 
-            var initResult = contract.submitTransaction("init", "a", "200", "b", "300");
+            var initResult = contract.submitTransaction("invoke", "a", "b", "5");
             System.out.println(new String(initResult, StandardCharsets.UTF_8));
 
             byte[] queryResult = contract.evaluateTransaction("query", "a");
             System.out.println(new String(queryResult, StandardCharsets.UTF_8));
+        } catch (EndorseException e) {
+            System.out.println("Endorse error: " + e.getMessage());
+            System.out.println("Endorse error details: " + e.getDetails());
         } finally {
             grpcChannel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
         }

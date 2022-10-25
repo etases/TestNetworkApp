@@ -25,15 +25,10 @@ public class TestNetworkApp {
     // Path to peer tls certificate.
     private static final Path tlsCertPath = cryptoPath.resolve(Paths.get("peers", "peer1.org0.example.com", "tls", "ca.crt"));
 
-    // Gateway peer end point.
-    private static final String overrideAuth = "peer1.org0.example.com";
-
-    private static final String mspID = "Org0MSP";
-
     public static void main(String[] args) throws IOException, InvalidKeyException, GatewayException, InterruptedException, CommitException, CertificateException {
         var certReader = Files.newBufferedReader(certPath);
         var certificate = Identities.readX509Certificate(certReader);
-        Identity identity = new X509Identity(mspID, certificate);
+        Identity identity = new X509Identity("org1-example-com", certificate);
 
         Path keyPath;
         try (var keyFiles = Files.list(keyDirPath)) {
@@ -47,7 +42,7 @@ public class TestNetworkApp {
         var tlsCert = Identities.readX509Certificate(tlsCertReader);
         ManagedChannel grpcChannel = NettyChannelBuilder.forAddress("192.168.1.10", 7002)
                 .keepAliveWithoutCalls(true)
-                .sslContext(GrpcSslContexts.forClient().trustManager(tlsCert).build()).overrideAuthority(overrideAuth)
+                .sslContext(GrpcSslContexts.forClient().trustManager(tlsCert).build()).overrideAuthority("peer1.org0.example.com")
                 .build();
 
         Gateway.Builder builder = Gateway.newInstance()

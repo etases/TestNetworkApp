@@ -1,45 +1,75 @@
 package me.hsgamer.testnetworkapp;
 
-import org.hyperledger.fabric.gateway.*;
+import io.grpc.ManagedChannel;
+import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
+import org.hyperledger.fabric.client.*;
+import org.hyperledger.fabric.client.identity.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.concurrent.TimeoutException;
+import java.security.InvalidKeyException;
+import java.security.cert.CertificateException;
+import java.util.concurrent.TimeUnit;
 
-// TODO: use fabric-gateway
 public class TestNetworkApp {
-    public static void main(String[] args) throws IOException {
-        // Load an existing wallet holding identities used to access the network.
-        Path walletDirectory = Paths.get("wallet");
-        Wallet wallet = Wallets.newFileSystemWallet(walletDirectory);
+    // Path to crypto materials.
+    private static final Path cryptoPath = Paths.get("..", "Minifabric", "vars", "keyfiles", "peerOrganizations", "org0.example.com");
+    // Path to user certificate.
+    private static final Path certPath = cryptoPath.resolve(Paths.get("users", "Admin@org0.example.com", "msp", "signcerts", "Admin@org0.example.com-cert.pem"));
+    // Path to user private key directory.
+    private static final Path keyDirPath = cryptoPath.resolve(Paths.get("users", "Admin@org0.example.com", "msp", "keystore"));
+    // Path to peer tls certificate.
+    private static final Path tlsCertPath = cryptoPath.resolve(Paths.get("peers", "peer1.org0.example.com", "tls", "ca.crt"));
 
-        // Path to a common connection profile describing the network.
-        Path networkConfigFile = Paths.get("connection.yaml");
+    // Gateway peer end point.
+    private static final String overrideAuth = "peer1.org0.example.com";
 
-        // Configure the gateway connection used to access the network.
-        Gateway.Builder builder = Gateway.createBuilder()
-                .identity(wallet, "Admin")
-                .networkConfig(networkConfigFile);
+    private static final String mspID = "Org0MSP";
 
-        // Create a gateway connection
+    public static void main(String[] args) throws IOException, InvalidKeyException, GatewayException, InterruptedException, CommitException, CertificateException {
+        var certReader = Files.newBufferedReader(certPath);
+        var certificate = Identities.readX509Certificate(certReader);
+        Identity identity = new X509Identity(mspID, certificate);
+
+        Path keyPath;
+        try (var keyFiles = Files.list(keyDirPath)) {
+            keyPath = keyFiles.findFirst().orElseThrow();
+        }
+        var keyReader = Files.newBufferedReader(keyPath);
+        var privateKey = Identities.readPrivateKey(keyReader);
+        Signer signer = Signers.newPrivateKeySigner(privateKey);
+
+        var tlsCertReader = Files.newBufferedReader(tlsCertPath);
+        var tlsCert = Identities.readX509Certificate(tlsCertReader);
+        ManagedChannel grpcChannel = NettyChannelBuilder.forAddress("192.168.1.10", 7002)
+                .keepAliveWithoutCalls(true)
+                .sslContext(GrpcSslContexts.forClient().trustManager(tlsCert).build()).overrideAuthority(overrideAuth)
+                .build();
+
+        Gateway.Builder builder = Gateway.newInstance()
+                .identity(identity)
+                .signer(signer)
+                .connection(grpcChannel)
+                .evaluateOptions(options -> options.withDeadlineAfter(5, TimeUnit.SECONDS))
+                .endorseOptions(options -> options.withDeadlineAfter(15, TimeUnit.SECONDS))
+                .submitOptions(options -> options.withDeadlineAfter(5, TimeUnit.SECONDS))
+                .commitStatusOptions(options -> options.withDeadlineAfter(1, TimeUnit.MINUTES));
+
         try (Gateway gateway = builder.connect()) {
-
-            // Obtain a smart contract deployed on the network.
             Network network = gateway.getNetwork(args.length > 0 ? args[0] : "mychannel");
             Contract contract = network.getContract("simple");
 
-            // Submit transactions that store state to the ledger.
-            byte[] createCarResult = contract.createTransaction("init").submit("a","200","b","300");
-            System.out.println(new String(createCarResult, StandardCharsets.UTF_8));
+            var initResult = contract.submitTransaction("init", "a", "200", "b", "300");
+            System.out.println(new String(initResult, StandardCharsets.UTF_8));
 
-            // Evaluate transactions that query state from the ledger.
-            byte[] queryAllCarsResult = contract.evaluateTransaction("query", "a");
-            System.out.println(new String(queryAllCarsResult, StandardCharsets.UTF_8));
-
-        } catch (ContractException | TimeoutException | InterruptedException e) {
-            e.printStackTrace();
+            byte[] queryResult = contract.evaluateTransaction("query", "a");
+            System.out.println(new String(queryResult, StandardCharsets.UTF_8));
+        } finally {
+            grpcChannel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
         }
     }
 }

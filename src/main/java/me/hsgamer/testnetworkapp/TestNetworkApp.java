@@ -1,5 +1,6 @@
 package me.hsgamer.testnetworkapp;
 
+import com.google.protobuf.Descriptors;
 import io.grpc.ManagedChannel;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
@@ -74,21 +75,30 @@ public class TestNetworkApp {
             var queryResult3 = contract.evaluateTransaction("query", "c");
             System.out.println(new String(queryResult3, StandardCharsets.UTF_8));
         } catch (EndorseException e) {
+            e.printStackTrace();
             System.out.println("Endorse error: " + e.getMessage());
             System.out.println("Endorse error details: " + e.getDetails());
+            System.out.println("Endorse status: " + e.getStatus());
+            printErrorDetails(e.getDetails());
         } catch (CommitException e) {
             throw new RuntimeException(e);
         } catch (SubmitException e) {
+            e.printStackTrace();
             System.out.println("Submit error: " + e.getMessage());
             System.out.println("Submit details: " + e.getDetails());
+            System.out.println("Submit status: " + e.getStatus());
             printErrorDetails(e.getDetails());
         } catch (CommitStatusException e) {
+            e.printStackTrace();
             System.out.println("Commit Status error: " + e.getMessage());
             System.out.println("Commit Status details: " + e.getDetails());
+            System.out.println("Commit Status status: " + e.getStatus());
             printErrorDetails(e.getDetails());
         } catch (GatewayException e) {
+            e.printStackTrace();
             System.out.println("Gateway error: " + e.getMessage());
             System.out.println("Gateway error details: " + e.getDetails());
+            System.out.println("Gateway status: " + e.getStatus());
             printErrorDetails(e.getDetails());
         } finally {
             grpcChannel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);

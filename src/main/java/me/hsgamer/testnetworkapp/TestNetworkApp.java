@@ -5,6 +5,7 @@ import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import org.hyperledger.fabric.client.*;
 import org.hyperledger.fabric.client.identity.*;
+import org.hyperledger.fabric.protos.gateway.ErrorDetail;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.InvalidKeyException;
 import java.security.cert.CertificateException;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TestNetworkApp {
@@ -27,7 +29,7 @@ public class TestNetworkApp {
     // Path to peer tls certificate.
     private static final Path tlsCertPath = cryptoPath.resolve(Paths.get("peers", "peer1.org0.example.com", "tls", "ca.crt"));
 
-    public static void main(String[] args) throws IOException, InvalidKeyException, GatewayException, InterruptedException, CommitException, CertificateException {
+    public static void main(String[] args) throws IOException, CertificateException, InvalidKeyException, InterruptedException {
         var certReader = Files.newBufferedReader(certPath);
         var certificate = Identities.readX509Certificate(certReader);
         Identity identity = new X509Identity("org0-example-com", certificate);
@@ -63,13 +65,42 @@ public class TestNetworkApp {
             var initResult = contract.submitTransaction("invoke", "a", "b", "5");
             System.out.println(new String(initResult, StandardCharsets.UTF_8));
 
-            byte[] queryResult = contract.evaluateTransaction("query", "a");
+            var queryResult = contract.evaluateTransaction("query", "a");
             System.out.println(new String(queryResult, StandardCharsets.UTF_8));
+
+            var queryResult2 = contract.evaluateTransaction("query", "b");
+            System.out.println(new String(queryResult2, StandardCharsets.UTF_8));
+
+            var queryResult3 = contract.evaluateTransaction("query", "c");
+            System.out.println(new String(queryResult3, StandardCharsets.UTF_8));
         } catch (EndorseException e) {
             System.out.println("Endorse error: " + e.getMessage());
             System.out.println("Endorse error details: " + e.getDetails());
+        } catch (CommitException e) {
+            throw new RuntimeException(e);
+        } catch (SubmitException e) {
+            System.out.println("Submit error: " + e.getMessage());
+            System.out.println("Submit details: " + e.getDetails());
+            printErrorDetails(e.getDetails());
+        } catch (CommitStatusException e) {
+            System.out.println("Commit Status error: " + e.getMessage());
+            System.out.println("Commit Status details: " + e.getDetails());
+            printErrorDetails(e.getDetails());
+        } catch (GatewayException e) {
+            System.out.println("Gateway error: " + e.getMessage());
+            System.out.println("Gateway error details: " + e.getDetails());
+            printErrorDetails(e.getDetails());
         } finally {
             grpcChannel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    public static void printErrorDetails(List<ErrorDetail> errorDetails) {
+        for (ErrorDetail errorDetail : errorDetails) {
+            System.out.println("Error: " + errorDetail.getMessage());
+            System.out.println("Error address: " + errorDetail.getAddress());
+            System.out.println("Error msp id: " + errorDetail.getMspId());
+            System.out.println("Error fields: " + errorDetail.getAllFields());
         }
     }
 }
